@@ -187,6 +187,8 @@ nav{
 }
 .wallet-orb{width:22px;height:22px;border-radius:50%;background:var(--g-amber);flex-shrink:0}
 #wallet-addr{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--sub)}
+.wallet-info{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+#wallet-balance{font-size:10px;color:var(--green);font-family:'JetBrains Mono',monospace}
 
 /* ── HERO ── */
 .hero{
@@ -677,7 +679,7 @@ footer{
     <button id="btn-connect" onclick="connectWallet()">🦊 Connect MetaMask</button>
     <div id="wallet-display">
       <div class="wallet-orb"></div>
-      <span id="wallet-addr">0x…</span>
+      <div class="wallet-info"><span id="wallet-addr">0x…</span><span id="wallet-balance">0 ETH</span></div>
     </div>
   </div>
 </nav>
@@ -798,6 +800,12 @@ footer{
           <span class="spin"></span><span>🔄 Transfer on Blockchain</span>
         </button>
         <div class="info-box info-inf"><span>ℹ️</span><span><strong>Owner only.</strong> Only the current vehicle owner can initiate a transfer.</span></div>
+        <div class="field" style="margin-top:14px">
+          <label>💰 Fixed Sale Price (ETH, 0 removes listing)</label>
+          <input type="text" id="t-price" placeholder="0.05" inputmode="decimal" autocomplete="off"/>
+        </div>
+        <button class="btn btn-glass w" id="price-btn" onclick="setVehiclePrice()"><span class="spin"></span><span>Set or Remove ETH Listing</span></button>
+        <div class="info-box info-inf"><span>ℹ️</span><span>A buyer pays the exact listed amount. Payment and token ownership change happen atomically on Ethereum.</span></div>
       </div>
     </div>
   </div>
@@ -840,7 +848,7 @@ footer{
     <div class="steps">
       <div class="card step"><div class="step-num">01</div><span class="step-em">📋</span><div class="step-t">Open Remix IDE</div><div class="step-d">Go to <a href="https://remix.ethereum.org" target="_blank" style="color:var(--amber)">remix.ethereum.org</a>, create <code style="font-family:monospace;color:var(--cyan);font-size:11px">VehicleRegistry.sol</code> and paste the contract code</div></div>
       <div class="card step"><div class="step-num">02</div><span class="step-em">🦊</span><div class="step-t">Deploy via MetaMask</div><div class="step-d">Select <strong>Injected Provider — MetaMask</strong> on Sepolia Testnet, click Deploy and confirm the transaction</div></div>
-      <div class="card step"><div class="step-num">03</div><span class="step-em">⚙️</span><div class="step-t">Update CONTRACT_ADDRESS</div><div class="step-d">Copy the deployed address → paste into <code style="font-family:monospace;color:var(--cyan);font-size:11px">app.js</code> line 13 as <code style="font-family:monospace;color:var(--amber);font-size:11px">CONTRACT_ADDRESS</code></div></div>
+      <div class="card step"><div class="step-num">03</div><span class="step-em">⚙️</span><div class="step-t">Update CONTRACT_ADDRESS</div><div class="step-d">Copy the newly deployed address → replace the placeholder in the inline configuration near the bottom of <code style="font-family:monospace;color:var(--cyan);font-size:11px">index.html</code></div></div>
       <div class="card step"><div class="step-num">04</div><span class="step-em">🚀</span><div class="step-t">Launch &amp; Use</div><div class="step-d">Refresh <strong>localhost:3000</strong>, connect MetaMask → register vehicles, transfer ownership and track history!</div></div>
     </div>
   </div>
@@ -848,7 +856,7 @@ footer{
 
 <footer>
   <strong style="color:var(--sub)">VehicleChain</strong> · Blockchain Vehicle Registry DApp · Ethereum Sepolia Testnet · Built with Solidity + Web3.js + MetaMask
-  <span id="footer-contract">Contract not configured — update CONTRACT_ADDRESS in app.js</span>
+  <span id="footer-contract">Contract not configured — deploy VehicleRegistry and set CONTRACT_ADDRESS in index.html</span>
 </footer>
 
 <script>
@@ -863,13 +871,19 @@ const ABI = [
   {"inputs":[],"stateMutability":"nonpayable","type":"constructor"},
   {"anonymous":false,"inputs":[{"indexed":true,"internalType":"string","name":"vehicleId","type":"string"},{"indexed":true,"internalType":"address","name":"from","type":"address"},{"indexed":true,"internalType":"address","name":"to","type":"address"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"OwnershipTransferred","type":"event"},
   {"anonymous":false,"inputs":[{"indexed":true,"internalType":"string","name":"vehicleId","type":"string"},{"indexed":true,"internalType":"address","name":"owner","type":"address"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"VehicleRegistered","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"string","name":"vehicleId","type":"string"},{"indexed":false,"internalType":"uint256","name":"priceWei","type":"uint256"}],"name":"VehiclePriceUpdated","type":"event"},
+  {"anonymous":false,"inputs":[{"indexed":true,"internalType":"string","name":"vehicleId","type":"string"},{"indexed":true,"internalType":"address","name":"seller","type":"address"},{"indexed":true,"internalType":"address","name":"buyer","type":"address"},{"indexed":false,"internalType":"uint256","name":"priceWei","type":"uint256"}],"name":"VehiclePurchased","type":"event"},
   {"inputs":[],"name":"admin","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"}],"name":"getCurrentOwner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"}],"name":"getOwnershipHistory","outputs":[{"internalType":"address[]","name":"","type":"address[]"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"}],"name":"getVehicleTokenId","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
+  {"inputs":[{"internalType":"uint256","name":"","type":"uint256"}],"name":"salePrices","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"}],"name":"getVehicleDetails","outputs":[{"internalType":"string","name":"vehicleId","type":"string"},{"internalType":"string","name":"model","type":"string"},{"internalType":"uint256","name":"year","type":"uint256"},{"internalType":"address","name":"currentOwner","type":"address"},{"internalType":"uint256","name":"registrationDate","type":"uint256"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"}],"name":"isVehicleRegistered","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},
   {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"},{"internalType":"string","name":"_model","type":"string"},{"internalType":"uint256","name":"_year","type":"uint256"},{"internalType":"address","name":"_owner","type":"address"}],"name":"registerVehicle","outputs":[],"stateMutability":"nonpayable","type":"function"},
   {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"},{"internalType":"address","name":"_newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"},{"internalType":"uint256","name":"_priceWei","type":"uint256"}],"name":"setVehiclePrice","outputs":[],"stateMutability":"nonpayable","type":"function"},
+  {"inputs":[{"internalType":"string","name":"_vehicleId","type":"string"}],"name":"buyVehicle","outputs":[],"stateMutability":"payable","type":"function"},
   {"inputs":[{"internalType":"string","name":"","type":"string"}],"name":"vehicles","outputs":[{"internalType":"string","name":"vehicleId","type":"string"},{"internalType":"string","name":"model","type":"string"},{"internalType":"uint256","name":"year","type":"uint256"},{"internalType":"address","name":"currentOwner","type":"address"},{"internalType":"uint256","name":"registrationDate","type":"uint256"},{"internalType":"bool","name":"exists","type":"bool"}],"stateMutability":"view","type":"function"}
 ];
 
@@ -877,6 +891,7 @@ const ABI = [
 let web3, contract, account = null, admin = null;
 let vehicles = [], events = [];
 let stats = {reg:0, tx:0};
+let transferTxHashes = new Set();
 
 // ─── INIT ────────────────────────────────────────────────────
 window.addEventListener("DOMContentLoaded", () => {
@@ -939,7 +954,8 @@ async function onConnect(acc) {
   }
   updateNav();
   renderFleet();
-  toast("success","Wallet Connected 🦊", shortAddr(acc));
+  await refreshWalletBalance();
+  toast("success","Wallet Connected 🦊", acc);
 }
 
 function onDisconnect() {
@@ -960,6 +976,7 @@ function updateNav() {
     bc.style.display  = "none";
     wd.style.display  = "flex";
     wa.textContent    = shortAddr(account);
+    wa.title          = account;
     const isAdm = admin && account.toLowerCase() === admin.toLowerCase();
     at.style.display  = isAdm ? "flex"  : "none";
     at2.style.display = isAdm ? "flex"  : "none";
@@ -999,6 +1016,7 @@ function renderFleet(filter = "") {
 function vcardHTML(v) {
   const em = carEmoji(v.model);
   const mine = account && v.owner && v.owner.toLowerCase() === account.toLowerCase();
+  const price = v.priceWei && BigInt(v.priceWei) > 0n ? web3.utils.fromWei(v.priceWei, "ether") : "";
   return `
     <div class="card vc" onclick="openDetail('${v.id}')">
       <div class="vc-img">
@@ -1013,9 +1031,12 @@ function vcardHTML(v) {
           <div class="vc-orb"></div>
           <div><div class="vc-olbl">Current Owner</div><div class="vc-oaddr">${shortAddr(v.owner)}</div></div>
         </div>
+        <div class="vc-meta"><span>Token #${v.tokenId || "—"}</span><span>${price ? `${price} ETH` : "Not listed"}</span></div>
         <div class="vc-btns">
           <button class="btn-vc-p" onclick="event.stopPropagation();openDetail('${v.id}')">🔍 View Details</button>
-          ${mine
+          ${price && !mine
+            ? `<button class="btn-vc-s" onclick="event.stopPropagation();doBuy('${v.id}')">Buy · ${price} ETH</button>`
+            : mine
             ? `<button class="btn-vc-s" onclick="event.stopPropagation();openTransferModal('${v.id}')">🔄 Transfer</button>`
             : `<button class="btn-vc-s" onclick="event.stopPropagation();quickQuery('${v.id}')">📋 History</button>`
           }
@@ -1038,11 +1059,14 @@ async function doRegister() {
   setLoading("reg-btn", true);
   try {
     const tx = await contract.methods.registerVehicle(id, model, year, owner).send({from:account});
-    upsertVehicle({id, model, year:year.toString(), owner});
+    const tokenId = await contract.methods.getVehicleTokenId(id).call();
+    const priceWei = await contract.methods.salePrices(tokenId).call();
+    upsertVehicle({id, model, year:year.toString(), owner, tokenId, priceWei});
     stats.reg++; syncStats();
+    await refreshWalletBalance();
     addEvent("r",{vid:id, owner, hash:tx.transactionHash, block:tx.blockNumber});
     renderFleet(document.getElementById("search").value);
-    toast("success","Registered! 🎉",`${id} is now on-chain.`);
+    toast("success","Token Minted! 🎉",`${id} · ERC-721 token #${tokenId} · TX ${shortAddr(tx.transactionHash)}`);
     ["r-id","r-year","r-model","r-owner"].forEach(i => document.getElementById(i).value = "");
   } catch(e) { toast("error","Registration Failed", parseErr(e)); }
   finally { setLoading("reg-btn", false); }
@@ -1060,14 +1084,58 @@ async function doTransfer(vid, newOwner) {
   try {
     const tx = await contract.methods.transferOwnership(vid, newOwner).send({from:account});
     const v = vehicles.find(x => x.id === vid);
-    if (v) v.owner = newOwner;
-    stats.tx++; syncStats();
+    if (v) { v.owner = newOwner; v.priceWei = "0"; }
+    recordTransfer(tx.transactionHash);
     addEvent("t",{vid, from:account, to:newOwner, hash:tx.transactionHash, block:tx.blockNumber});
+    await refreshWalletBalance();
     renderFleet(document.getElementById("search").value);
+    if (val("q-id") === vid) await doQuery();
     toast("success","Transferred! 🔄",`${vid} → ${shortAddr(newOwner)}`);
     ["t-id","t-owner"].forEach(i => document.getElementById(i).value = "");
   } catch(e) { toast("error","Transfer Failed", parseErr(e)); }
   finally { setLoading("tx-btn", false); }
+}
+
+async function setVehiclePrice() {
+  if (!check()) return;
+  const id = val("t-id");
+  const price = val("t-price");
+  if (!id || price === "") return toast("warning","Missing Fields","Enter a Vehicle ID and a price. Use 0 to remove a listing.");
+  if (!/^\d+(\.\d{1,18})?$/.test(price)) return toast("error","Invalid Price","Enter a non-negative ETH amount with up to 18 decimal places.");
+  setLoading("price-btn", true);
+  try {
+    const priceWei = web3.utils.toWei(price, "ether");
+    const tx = await contract.methods.setVehiclePrice(id, priceWei).send({from:account});
+    const vehicle = vehicles.find(item => item.id === id);
+    if (vehicle) vehicle.priceWei = priceWei;
+    await refreshWalletBalance();
+    renderFleet(document.getElementById("search").value);
+    addEvent("p",{vid:id, owner:account, price, hash:tx.transactionHash, block:tx.blockNumber});
+    toast("success",priceWei === "0" ? "Listing Removed" : "Vehicle Listed",priceWei === "0" ? id : `${id} listed for ${price} ETH`);
+  } catch(e) { toast("error","Listing Failed",parseErr(e)); }
+  finally { setLoading("price-btn", false); }
+}
+
+async function doBuy(id) {
+  if (!check()) return;
+  const vehicle = vehicles.find(item => item.id === id);
+  if (!vehicle?.priceWei || BigInt(vehicle.priceWei) === 0n) return toast("error","Not Listed","This vehicle has no active ETH listing.");
+  const price = web3.utils.fromWei(vehicle.priceWei, "ether");
+  if (!window.confirm(`Buy ${id} for exactly ${price} ETH? MetaMask will ask you to confirm.`)) return;
+  try {
+    const tx = await contract.methods.buyVehicle(id).send({from:account, value:vehicle.priceWei});
+    const [owner, priceWei] = await Promise.all([
+      contract.methods.getCurrentOwner(id).call(),
+      contract.methods.salePrices(vehicle.tokenId).call()
+    ]);
+    Object.assign(vehicle,{owner,priceWei});
+    recordTransfer(tx.transactionHash);
+    renderFleet(document.getElementById("search").value);
+    addEvent("b",{vid:id, from:tx.events?.VehiclePurchased?.returnValues?.seller, to:account, price, hash:tx.transactionHash, block:tx.blockNumber});
+    await refreshWalletBalance();
+    if (val("q-id") === id) await doQuery();
+    toast("success","Purchase Complete",`${id} · token #${vehicle.tokenId} · ${price} ETH · ${shortAddr(tx.transactionHash)}`);
+  } catch(e) { toast("error","Purchase Failed",parseErr(e)); }
 }
 
 // ─── QUERY ───────────────────────────────────────────────────
@@ -1081,9 +1149,11 @@ async function doQuery() {
       contract.methods.getVehicleDetails(id).call(),
       contract.methods.getOwnershipHistory(id).call()
     ]);
-    upsertVehicle({id:d.vehicleId, model:d.model, year:d.year.toString(), owner:d.currentOwner});
+    const tokenId = await contract.methods.getVehicleTokenId(id).call();
+    const priceWei = await contract.methods.salePrices(tokenId).call();
+    upsertVehicle({id:d.vehicleId, model:d.model, year:d.year.toString(), owner:d.currentOwner, tokenId, priceWei});
     renderFleet(document.getElementById("search").value);
-    renderDetailCard(d, hist);
+    renderDetailCard(d, hist, tokenId, priceWei);
     toast("success","Vehicle Found",`Details loaded for ${id}`);
   } catch(e) {
     document.getElementById("query-result").innerHTML = "";
@@ -1091,7 +1161,7 @@ async function doQuery() {
   } finally { setLoading("q-btn", false); }
 }
 
-function renderDetailCard(d, hist) {
+function renderDetailCard(d, hist, tokenId, priceWei) {
   const em = carEmoji(d.model);
   const reg = new Date(Number(d.registrationDate)*1000).toLocaleDateString("en-US",{year:"numeric",month:"short",day:"numeric"});
   const mine = account && d.currentOwner.toLowerCase() === account.toLowerCase();
@@ -1119,7 +1189,7 @@ function renderDetailCard(d, hist) {
         <div class="detail-top">
           <div>
             <div class="detail-name">${d.model}</div>
-            <div class="detail-id">ID: ${d.vehicleId}</div>
+            <div class="detail-id">ID: ${d.vehicleId} · ERC-721 token #${tokenId}</div>
           </div>
           <div class="detail-acts">
             <a href="${SCAN}/address/${d.currentOwner}" target="_blank" class="tx-lnk">Etherscan ↗</a>
@@ -1135,6 +1205,12 @@ function renderDetailCard(d, hist) {
         <div class="owner-block" style="margin-bottom:18px">
           <div class="orb"></div>
           <div class="owner-addr">${d.currentOwner}</div>
+        </div>
+        <div class="sec-lbl">ETH Sale Listing</div>
+        <div class="owner-block" style="margin-bottom:18px">
+          <div class="orb"></div>
+          <div class="owner-addr">${BigInt(priceWei) > 0n ? `${web3.utils.fromWei(priceWei, "ether")} ETH` : "Not listed"}</div>
+          ${BigInt(priceWei) > 0n && !mine ? `<button class="btn btn-amber" onclick="doBuy('${d.vehicleId}')">Buy with MetaMask</button>` : ""}
         </div>
         <div class="sec-lbl">Ownership Timeline (${hist.length} record${hist.length!==1?"s":""})</div>
         <div class="timeline">${tl}</div>
@@ -1167,10 +1243,12 @@ async function doModalTransfer() {
   try {
     const tx = await contract.methods.transferOwnership(vid, owner).send({from:account});
     const v = vehicles.find(x => x.id === vid);
-    if (v) v.owner = owner;
-    stats.tx++; syncStats();
+    if (v) { v.owner = owner; v.priceWei = "0"; }
+    recordTransfer(tx.transactionHash);
     addEvent("t",{vid, from:account, to:owner, hash:tx.transactionHash, block:tx.blockNumber});
+    await refreshWalletBalance();
     renderFleet(document.getElementById("search").value);
+    if (val("q-id") === vid) await doQuery();
     closeModal();
     toast("success","Transferred! 🔄",`${vid} → ${shortAddr(owner)}`);
   } catch(e) { toast("error","Transfer Failed", parseErr(e)); }
@@ -1186,8 +1264,25 @@ function subscribeEvents() {
       addEvent("r",{vid:e.returnValues.vehicleId, owner:e.returnValues.owner, hash:e.transactionHash, block:e.blockNumber});
     });
     contract.events.OwnershipTransferred({fromBlock:"latest"}).on("data", e => {
-      stats.tx++; syncStats();
+      recordTransfer(e.transactionHash);
       addEvent("t",{vid:e.returnValues.vehicleId, from:e.returnValues.from, to:e.returnValues.to, hash:e.transactionHash, block:e.blockNumber});
+      contract.methods.getVehicleDetails(e.returnValues.vehicleId).call().then(async d => {
+        const tokenId = await contract.methods.getVehicleTokenId(d.vehicleId).call();
+        const priceWei = await contract.methods.salePrices(tokenId).call();
+        upsertVehicle({id:d.vehicleId, model:d.model, year:d.year.toString(), owner:d.currentOwner, tokenId, priceWei});
+        renderFleet(document.getElementById("search").value);
+      }).catch(() => {});
+    });
+    contract.events.VehiclePurchased({fromBlock:"latest"}).on("data", e => {
+      addEvent("b",{vid:e.returnValues.vehicleId, from:e.returnValues.seller, to:e.returnValues.buyer, price:web3.utils.fromWei(e.returnValues.priceWei,"ether"), hash:e.transactionHash, block:e.blockNumber});
+    });
+    contract.events.VehiclePriceUpdated({fromBlock:"latest"}).on("data", e => {
+      addEvent("p",{vid:e.returnValues.vehicleId, price:web3.utils.fromWei(e.returnValues.priceWei,"ether"), hash:e.transactionHash, block:e.blockNumber});
+      contract.methods.getVehicleDetails(e.returnValues.vehicleId).call().then(async d => {
+        const tokenId = await contract.methods.getVehicleTokenId(d.vehicleId).call();
+        upsertVehicle({id:d.vehicleId, model:d.model, year:d.year.toString(), owner:d.currentOwner, tokenId, priceWei:e.returnValues.priceWei});
+        renderFleet(document.getElementById("search").value);
+      }).catch(() => {});
     });
   } catch(_){}
 }
@@ -1199,17 +1294,21 @@ async function loadPastEvents() {
     for (const e of regEv) {
       try {
         const d = await contract.methods.getVehicleDetails(e.returnValues.vehicleId).call();
-        upsertVehicle({id:d.vehicleId, model:d.model, year:d.year.toString(), owner:d.currentOwner});
+        const tokenId = await contract.methods.getVehicleTokenId(d.vehicleId).call();
+        const priceWei = await contract.methods.salePrices(tokenId).call();
+        upsertVehicle({id:d.vehicleId, model:d.model, year:d.year.toString(), owner:d.currentOwner, tokenId, priceWei});
       } catch(_){}
     }
     stats.reg = regEv.length;
     const txEv = await contract.getPastEvents("OwnershipTransferred",{fromBlock:0,toBlock:"latest"});
     stats.tx = txEv.length;
+    transferTxHashes = new Set(txEv.map(e => e.transactionHash));
     syncStats(); renderFleet(document.getElementById("search").value);
   } catch(_){}
 }
 
 function addEvent(type, data) {
+  if (events.some(event => event.type === type && event.data.hash === data.hash)) return;
   events.unshift({type, data, ts: new Date()});
   renderEvents();
   syncStats();
@@ -1223,12 +1322,14 @@ function renderEvents() {
   }
   el.innerHTML = events.map(({type,data,ts}) => {
     const isR = type==="r";
+    const isPurchase = type==="b";
+    const isListing = type==="p";
     return `
       <div class="evitem" onclick="openScan('tx','${data.hash}')">
-        <div class="evicon ${isR?"r":"t"}">${isR?"🚘":"🔄"}</div>
+        <div class="evicon ${isR?"r":"t"}">${isR?"🚘":isPurchase?"💸":isListing?"💰":"🔄"}</div>
         <div class="evbody">
-          <div class="evtitle">${isR?"Vehicle Registered":"Ownership Transferred"} — <strong>${data.vid}</strong></div>
-          <div class="evsub">${isR ? `Owner: ${data.owner||""}` : `${shortAddr(data.from)} → ${shortAddr(data.to)}`}</div>
+          <div class="evtitle">${isR?"Vehicle Token Minted":isPurchase?"Vehicle Purchased":isListing?"ETH Listing Updated":"Ownership Transferred"} — <strong>${data.vid}</strong></div>
+          <div class="evsub">${isR ? `Owner: ${data.owner||""}` : isPurchase ? `${shortAddr(data.from)} → ${shortAddr(data.to)} · ${data.price} ETH` : isListing ? `${data.price} ETH` : `${shortAddr(data.from)} → ${shortAddr(data.to)}`}</div>
         </div>
         <div class="evmeta">
           <span class="evtime">${ts.toLocaleTimeString()}</span>
@@ -1295,6 +1396,22 @@ function syncStats() {
   document.getElementById("s-reg").textContent      = stats.reg;
   document.getElementById("s-tx").textContent       = stats.tx;
   document.getElementById("s-ev").textContent       = events.length;
+}
+
+function recordTransfer(hash) {
+  if (!hash || transferTxHashes.has(hash)) return;
+  transferTxHashes.add(hash);
+  stats.tx++;
+  syncStats();
+}
+
+async function refreshWalletBalance() {
+  const balanceEl = document.getElementById("wallet-balance");
+  if (!account || !web3 || !balanceEl) return;
+  try {
+    const wei = await web3.eth.getBalance(account);
+    balanceEl.textContent = `${Number(web3.utils.fromWei(wei, "ether")).toFixed(4)} ETH`;
+  } catch(_) { balanceEl.textContent = "Balance unavailable"; }
 }
 
 function setLoading(id, on) {

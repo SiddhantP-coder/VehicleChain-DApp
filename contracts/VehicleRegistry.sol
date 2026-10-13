@@ -1,13 +1,19 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.19;
 
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.6/contracts/token/ERC721/ERC721.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.6/contracts/security/ReentrancyGuard.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.6/contracts/utils/Base64.sol";
+import "https://github.com/OpenZeppelin/openzeppelin-contracts/blob/v4.9.6/contracts/utils/Strings.sol";
+
 /**
  * @title VehicleRegistry
  * @author Vehicle DApp
  * @notice A decentralized vehicle registration and ownership transfer system
  * @dev Deployed on Ethereum (Sepolia Testnet recommended)
  */
-contract VehicleRegistry {
+contract VehicleRegistry is ERC721, ReentrancyGuard {
+    using Strings for uint256;
 
     // ─────────────────────────────────────────────────────────────
     // STATE VARIABLES
@@ -28,6 +34,12 @@ contract VehicleRegistry {
 
     /// @notice Mapping from vehicleId → Vehicle details
     mapping(string => Vehicle) public vehicles;
+
+    /// @notice Each registered vehicle is minted as one ERC-721 token
+    mapping(string => uint256) public vehicleTokenIds;
+    mapping(uint256 => string) private tokenVehicleIds;
+    mapping(uint256 => uint256) public salePrices;
+    uint256 public nextTokenId = 1;
 
     /// @notice Mapping from vehicleId → list of all historical owners
     mapping(string => address[]) private ownershipHistory;
@@ -50,6 +62,9 @@ contract VehicleRegistry {
         address indexed to,
         uint            timestamp
     );
+
+    event VehiclePriceUpdated(string indexed vehicleId, uint256 priceWei);
+    event VehiclePurchased(string indexed vehicleId, address indexed seller, address indexed buyer, uint256 priceWei);
 
     // ─────────────────────────────────────────────────────────────
     // MODIFIERS
@@ -83,7 +98,7 @@ contract VehicleRegistry {
     // CONSTRUCTOR
     // ─────────────────────────────────────────────────────────────
 
-    constructor() {
+    constructor() ERC721("VehicleChain Vehicle", "VCAR") {
         admin = msg.sender;
     }
 
@@ -110,6 +125,10 @@ contract VehicleRegistry {
         require(_owner != address(0),           "VehicleRegistry: Invalid owner address");
         require(!vehicles[_vehicleId].exists,   "VehicleRegistry: Vehicle already registered");
 
+        uint256 tokenId = nextTokenId++;
+        vehicleTokenIds[_vehicleId] = tokenId;
+        tokenVehicleIds[tokenId] = _vehicleId;
+
         vehicles[_vehicleId] = Vehicle({
             vehicleId:        _vehicleId,
             model:            _model,
@@ -121,6 +140,7 @@ contract VehicleRegistry {
 
         // Record initial owner in history
         ownershipHistory[_vehicleId].push(_owner);
+        _safeMint(_owner, tokenId);
 
         emit VehicleRegistered(_vehicleId, _owner, block.timestamp);
     }
@@ -137,13 +157,34 @@ contract VehicleRegistry {
         require(_newOwner != address(0),                          "VehicleRegistry: Invalid new owner address");
         require(_newOwner != msg.sender,                          "VehicleRegistry: Cannot transfer to yourself");
 
-        address previousOwner = vehicles[_vehicleId].currentOwner;
-        vehicles[_vehicleId].currentOwner = _newOwner;
+        _transfer(msg.sender, _newOwner, vehicleTokenIds[_vehicleId]);
+    }
 
-        // Append new owner to history
-        ownershipHistory[_vehicleId].push(_newOwner);
+    function setVehiclePrice(string memory _vehicleId, uint256 _priceWei)
+        external
+        vehicleExists(_vehicleId)
+        onlyOwner(_vehicleId)
+    {
+        uint256 tokenId = vehicleTokenIds[_vehicleId];
+        salePrices[tokenId] = _priceWei;
+        emit VehiclePriceUpdated(_vehicleId, _priceWei);
+    }
 
-        emit OwnershipTransferred(_vehicleId, previousOwner, _newOwner, block.timestamp);
+    function buyVehicle(string memory _vehicleId) external payable nonReentrant vehicleExists(_vehicleId) {
+        uint256 tokenId = vehicleTokenIds[_vehicleId];
+        uint256 price = salePrices[tokenId];
+        address seller = ownerOf(tokenId);
+
+        require(price > 0, "VehicleRegistry: Vehicle is not for sale");
+        require(msg.value == price, "VehicleRegistry: Incorrect ETH amount");
+        require(msg.sender != seller, "VehicleRegistry: Seller cannot buy own vehicle");
+
+        salePrices[tokenId] = 0;
+        _safeTransfer(seller, msg.sender, tokenId, "");
+
+        (bool paid, ) = payable(seller).call{value: msg.value}("");
+        require(paid, "VehicleRegistry: ETH payment failed");
+        emit VehiclePurchased(_vehicleId, seller, msg.sender, price);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -228,5 +269,64 @@ contract VehicleRegistry {
         returns (uint)
     {
         return ownershipHistory[_vehicleId].length;
+    }
+
+    function getVehicleTokenId(string memory _vehicleId) external view vehicleExists(_vehicleId) returns (uint256) {
+        return vehicleTokenIds[_vehicleId];
+    }
+
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        require(_exists(tokenId), "ERC721: URI query for nonexistent token");
+        string memory vehicleId = tokenVehicleIds[tokenId];
+        Vehicle storage vehicle = vehicles[vehicleId];
+        bytes memory metadata = abi.encodePacked(
+            '{"name":"', _escapeJson(vehicle.model), ' #', _escapeJson(vehicleId),
+            '","description":"VehicleChain ownership token for ', _escapeJson(vehicleId),
+            '","attributes":[{"trait_type":"Vehicle ID","value":"', _escapeJson(vehicleId),
+            '"},{"trait_type":"Year","display_type":"number","value":', vehicle.year.toString(), '}]}'
+        );
+        return string(abi.encodePacked("data:application/json;base64,", Base64.encode(metadata)));
+    }
+
+    function _escapeJson(string memory value) private pure returns (string memory) {
+        bytes memory input = bytes(value);
+        bytes memory output = new bytes(input.length * 6);
+        bytes16 hexSymbols = "0123456789abcdef";
+        uint256 outputLength;
+
+        for (uint256 i = 0; i < input.length; i++) {
+            bytes1 character = input[i];
+            uint8 characterValue = uint8(character);
+            if (character == '"' || character == '\\') {
+                output[outputLength++] = '\\';
+                output[outputLength++] = character;
+            } else if (characterValue < 0x20) {
+                output[outputLength++] = '\\';
+                output[outputLength++] = 'u';
+                output[outputLength++] = '0';
+                output[outputLength++] = '0';
+                output[outputLength++] = hexSymbols[characterValue >> 4];
+                output[outputLength++] = hexSymbols[characterValue & 0x0f];
+            } else {
+                output[outputLength++] = character;
+            }
+        }
+
+        assembly { mstore(output, outputLength) }
+        return string(output);
+    }
+
+    function _beforeTokenTransfer(address from, address to, uint256 tokenId, uint256 batchSize)
+        internal
+        override
+    {
+        super._beforeTokenTransfer(from, to, tokenId, batchSize);
+        if (from != address(0) && to != address(0)) {
+            string memory vehicleId = tokenVehicleIds[tokenId];
+            salePrices[tokenId] = 0;
+            ownershipHistory[vehicleId].push(to);
+            vehicles[vehicleId].currentOwner = to;
+            emit OwnershipTransferred(vehicleId, from, to, block.timestamp);
+        }
     }
 }

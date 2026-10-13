@@ -1,6 +1,6 @@
 # ⛓️ VehicleChain — Blockchain Vehicle Registry DApp
 
-> A decentralized application (DApp) for secure vehicle registration and transparent ownership transfer using Ethereum smart contracts.
+> A decentralized application (DApp) that mints each registered vehicle as an ERC-721 token and records ownership transfers on Ethereum.
 
 ---
 
@@ -11,9 +11,9 @@ Vehicle-Registry-DApp/
 ├── contracts/
 │   └── VehicleRegistry.sol     ← Solidity smart contract
 ├── frontend/
-│   ├── index.html              ← Main DApp UI
-│   ├── app.js                  ← Web3.js logic + contract calls
-│   └── style.css               ← Premium dark glassmorphism styles
+│   ├── index.html              ← Active DApp UI, styles, and Web3.js logic
+│   ├── app.js                  ← Legacy frontend script (not loaded by index.html)
+│   └── style.css               ← Legacy stylesheet (index.html uses inline styles)
 └── README.md
 ```
 
@@ -37,10 +37,10 @@ Go to [remix.ethereum.org](https://remix.ethereum.org)
 3. In Remix → **Deploy & Run Transactions** tab
 4. Environment: **Injected Provider - MetaMask**
 5. Click **Deploy** and confirm in MetaMask
-6. Copy the deployed **contract address**
+6. Copy the deployed **contract address**. This version must be freshly deployed; an earlier VehicleRegistry deployment does not support ERC-721 tokens or ETH sales.
 
 ### Step 4 — Configure the Frontend
-Open `frontend/app.js` and update line 13:
+Open `frontend/index.html` and replace the zero address in the inline configuration near the bottom:
 ```javascript
 const CONTRACT_ADDRESS = "0xYOUR_DEPLOYED_CONTRACT_ADDRESS_HERE";
 ```
@@ -54,9 +54,11 @@ Open `frontend/index.html` in your browser (or use Live Server in VS Code).
 
 | Feature | Description |
 |---------|-------------|
-| **Register Vehicle** | Admin-only. Creates immutable record on-chain |
-| **Transfer Ownership** | Owner-only. Updates current owner, appends to history |
-| **Query Details** | Public read. Returns model, year, owner, date |
+| **Register Vehicle** | Admin-only. Creates an immutable record and mints one ERC-721 token |
+| **Transfer Ownership** | Owner-only. Transfers the token and appends the recipient to history |
+| **ETH Sale Listing** | Owner sets a fixed price in ETH or removes the listing with 0 |
+| **Buy Vehicle** | Buyer pays the exact listed ETH amount; payment and token transfer are atomic |
+| **Query Details** | Public read. Returns model, year, token ID, owner, date, listing price, and history |
 | **Ownership History** | Public read. Returns all previous owners |
 | **Events** | `VehicleRegistered` & `OwnershipTransferred` emitted |
 
@@ -74,7 +76,9 @@ Open `frontend/index.html` in your browser (or use Live Server in VS Code).
 | MetaMask Connect | One-click wallet connection with auto-detect |
 | Sepolia Auto-Switch | Automatically prompts to switch network |
 | Register Form | Admin form to register new vehicles |
-| Transfer Form | Owner form to transfer to new address |
+| Transfer Form | Owner form to transfer the token or list/remove an ETH sale |
+| Vehicle Tokens | ERC-721 token IDs minted at registration and shown in the fleet/details |
+| ETH Purchases | MetaMask confirms exact-value payments directly to the seller |
 | Query Panel | Search any vehicle + full history table |
 | Event Log | Live feed of blockchain events |
 | Toast Notifications | Real-time tx success/error feedback |
@@ -99,17 +103,20 @@ Open `frontend/index.html` in your browser (or use Live Server in VS Code).
 
 After deployment, in Remix's **Deployed Contracts** panel you can:
 1. Call `registerVehicle("MH12AB1234", "Toyota Camry", 2024, <your-address>)`
-2. Call `transferOwnership("MH12AB1234", <new-address>)`
+2. Call `transferOwnership("MH12AB1234", <new-address>)` for a free owner-authorized transfer
 3. Call `getVehicleDetails("MH12AB1234")` — read vehicle info
 4. Call `getOwnershipHistory("MH12AB1234")` — read full history
+5. Call `setVehiclePrice("MH12AB1234", <price-in-wei>)`, then `buyVehicle("MH12AB1234")` with the exact amount in Remix's **Value** field
 
 ---
 
 ## ⚠️ Notes
 
 - Admin address is set at deployment (the deployer's wallet address)
-- Only admin can register; only current owner can transfer
-- All records are permanent and immutable on-chain
+- Only admin can register; only the current ERC-721 owner can transfer or list a vehicle
+- Free transfers cancel an existing sale listing; purchases transfer the listed ETH to the seller and update ownership in one transaction
+- Wallet addresses and transactions are public on Ethereum. Personal names or contact details are not stored on-chain.
+- Registration and ownership history are permanent on-chain; active sale listings can be changed or removed by the current owner
 - Use Sepolia testnet (free test ETH via faucet)
 
 ---
